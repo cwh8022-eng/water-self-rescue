@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>軟式網球技能闖關任務</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --ink: #263159;
+      --primary: #FF8F52;
+      --headline: #495579;
+      --paper: #FFFDF7;
+      --success: #16a34a;
+      --danger: #ef4444;
+      --accent: #8b5cf6;
+    }
+    body { background: var(--paper); color: var(--ink); }
+    .card { background:#fff; border-radius: 1rem; box-shadow: 0 8px 24px rgba(0,0,0,.08); }
+    .stamp-wrap { position: relative; }
+    /* 紅色完成印章（SVG） */
+    .stamp-svg {
+      position:absolute; top:-10px; left:50%; transform:translateX(-50%) rotate(-8deg) scale(0.2);
+      width:120px; height:120px; opacity:0; pointer-events:none;
+      filter: drop-shadow(0 4px 6px rgba(0,0,0,.2));
+    }
+    .stamp-bounce { animation: stampIn .7s ease-out forwards; }
+    @keyframes stampIn {
+      0% { transform:translateX(-50%) rotate(-8deg) scale(0.2); opacity:0; }
+      60% { transform:translateX(-50%) rotate(-6deg) scale(1.15); opacity:1; }
+      100% { transform:translateX(-50%) rotate(-8deg) scale(1); opacity:1; }
+    }
+
+    /* Modal 基礎 */
+    .modal { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:50; }
+    .modal.show { display:flex; }
+    .modal-card { width: min(960px, 92vw); background:#fff; border-radius:1rem; box-shadow:0 10px 30px rgba(0,0,0,.18); }
+    .modal-header { display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid #eee; }
+    .close-x { font-size:20px; font-weight:700; cursor:pointer; }
+    .modal-body { padding:0; }
+
+    /* 進度總覽徽章 */
+    .badge { display:inline-flex; align-items:center; gap:.5rem; padding:.4rem .75rem; border-radius:999px; font-weight:700; }
+    .badge-silver { background:#eef2ff; border:2px solid #c7d2fe; }
+    .badge-gold { background:#fff7e6; border:2px solid #facc15; }
+    .badge-trophy { background:#fff1f2; border:2px solid #fb7185; }
+
+    /* 金色獎盃動畫 */
+    .trophy-wrap { position:fixed; left:50%; top:-40vh; transform:translateX(-50%); z-index:60; pointer-events:none; display:none; }
+    .trophy-wrap.show { display:block; animation: dropIn 1s ease-out forwards, glow 2s ease-in-out 1s infinite alternate; }
+    @keyframes dropIn {
+      0% { top:-40vh; }
+      80% { top:15vh; }
+      100% { top:18vh; }
+    }
+    @keyframes glow {
+      from { filter: drop-shadow(0 0 0 rgba(250, 204, 21, .8)); }
+      to   { filter: drop-shadow(0 0 18px rgba(250, 204, 21, 1)); }
+    }
+
+    /* 教師模式提示 */
+    .teacher-badge { background:#ede9fe; color:#5b21b6; border:1px dashed #a78bfa; }
+
+    /* 表格 */
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #e5e7eb; padding: 8px; }
+    thead tr { background:#f3f4f6; }
+
+    /* 小工具 */
+    .btn { padding:.6rem 1rem; border-radius:.75rem; font-weight:700; }
+    .btn-green { background:var(--success); color:#fff; }
+    .btn-purple { background:var(--accent); color:#fff; }
+    .btn-red { background:var(--danger); color:#fff; }
+    .btn-ghost { background:#f3f4f6; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <!-- 巨大金色獎盃 -->
+  <div id="trophy" class="trophy-wrap">
+    <svg width="220" height="220" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="#facc15"/>
+          <stop offset="100%" stop-color="#eab308"/>
+        </linearGradient>
+      </defs>
+      <g fill="url(#g)" stroke="#92400e" stroke-width="1">
+        <path d="M12 8h40v6a14 14 0 0 1-14 14H26A14 14 0 0 1 12 14z"/>
+        <path d="M16 8v-4h32v4z"/>
+        <rect x="28" y="28" width="8" height="8" rx="1"/>
+        <rect x="24" y="36" width="16" height="6" rx="1"/>
+        <rect x="20" y="42" width="24" height="6" rx="1"/>
+        <rect x="16" y="48" width="32" height="6" rx="1"/>
+      </g>
+      <circle cx="32" cy="19" r="7" fill="#fde68a" opacity=".7"/>
+    </svg>
+  </div>
+
+  <!-- 頁首 -->
+  <header class="text-center px-4 py-6">
+    <h1 class="text-3xl md:text-4xl font-extrabold text-[var(--headline)]">軟式網球技能闖關任務單</h1>
+    <p class="text-sm text-gray-600 mt-2">登入後開始闖關 — 完成每一關輸入密碼 <b>888</b> 取得完成印章！</p>
+  </header>
+
+  <!-- 登入區 -->
+  <section id="loginSection" class="max-w-xl card mx-auto p-6 my-6">
+    <div class="flex items-center justify-between">
+      <h2 class="text-xl font-bold">學生登入</h2>
+      <span id="modePill" class="badge teacher-badge hidden">教師模式</span>
+    </div>
+    <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+      <input id="studentId" class="border rounded-lg p-3" placeholder="學號" />
+      <input id="studentName" class="border rounded-lg p-3" placeholder="姓名" />
+    </div>
+    <div class="mt-4 flex gap-3">
+      <button class="btn btn-green" onclick="login()">登入</button>
+      <button class="btn btn-ghost" onclick="toggleTeacherMode()">切換教師模式</button>
+    </div>
+    <p class="text-xs text-gray-500 mt-3">提示：教師模式可查看排行榜與總覽，用於課堂展示。</p>
+  </section>
+
+  <!-- 主內容 -->
+  <main id="app" class="container mx-auto px-4 pb-20 hidden">
+    <!-- 控制列 -->
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div class="flex items-center gap-2">
+        <span id="helloText" class="font-bold"></span>
+        <span id="modePill2" class="badge teacher-badge hidden">教師模式</span>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn btn-purple" onclick="openLeaderboard()">排行榜</button>
+        <button class="btn btn-red" onclick="logout()">登出</button>
+      </div>
+    </div>
+
+    <!-- 進度總覽 -->
+    <section class="card p-4 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 items-center gap-4">
+        <div class="justify-self-center">
+          <canvas id="overallChart" width="220" height="220"></canvas>
+        </div>
+        <div class="md:col-span-2">
+          <h3 class="text-xl font-bold mb-2">個人進度</h3>
+          <p id="overallText" class="text-sm text-gray-700 mb-3">已完成 0/10 (0%)</p>
+          <div class="flex flex-wrap gap-2 items-center">
+            <span id="badge5" class="badge badge-silver hidden">🥈 銀牌（5/10）</span>
+            <span id="badge8" class="badge badge-gold hidden">🥇 金牌（8/10）</span>
+            <span id="badge10" class="badge badge-trophy hidden">🏆 全部完成（10/10）</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 關卡區 -->
+    <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- 卡片會由 JS 注入 -->
+      <div id="cards" class="contents"></div>
+    </section>
+  </main>
+
+  <!-- 說明術語 Modal -->
+  <div id="glossaryModal" class="modal" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="font-bold" id="glossaryTitle">說明術語</h3>
+        <span class="close-x" onclick="closeGlossary()">✖</span>
+      </div>
+      <div class="modal-body p-4">
+        <p id="glossaryBody" class="text-gray-800 leading-7"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 影片 Modal -->
+  <div id="videoModal" class="modal" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="font-bold" id="videoTitle">學習資源</h3>
+        <span class="close-x" onclick="closeVideo()">✖</span>
+      </div>
+      <div class="modal-body">
+        <div class="aspect-video w-full">
+          <iframe id="videoFrame" class="w-full h-[60vh]" src="" title="YouTube video" frameborder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 排行榜 Modal -->
+  <div id="leaderboardModal" class="modal" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="font-bold">排行榜（本機）</h3>
+        <span class="close-x" onclick="closeLeaderboard()">✖</span>
+      </div>
+      <div class="modal-body p-4">
+        <table>
+          <thead>
+            <tr>
+              <th>學號</th><th>姓名</th><th>完成關卡</th><th>完成率</th><th>最後更新</th><th>通關總時間</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboardBody"></tbody>
+        </table>
+        <p class="text-xs text-gray-500 mt-2">*此排行榜紀錄於本裝置的瀏覽器 LocalStorage。</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ====== 常量 / 初始資料 ======
+    const TOTAL = 10;
+    const PASSWORD = "888";
+    let currentStudent = null;
+    let teacherMode = false;
+
+    const LOCAL_GLOSSARY = {
+      '移位步法練習': '軟式網球的步法練習強調快速移位與擊球位置調整。重點是保持重心在前腳掌，移動後利用小碎步調整到位，並及時回到中立位置準備下一球。',
+      '正拍底線擊球過網': '正拍底線擊球是最基本的擊球動作。握拍大拇指朝上比讚，要側身引拍，移動到位，向前誇步踩腳，擊球點在身體斜前方腰部高度的位置，擊球時拍面與地面平行，讓球穩定越過球網並落在對方底線區域。',
+      '反拍底線擊球過網': '反拍擊球握拍大拇指朝下比遜，需要提早準備，非慣用手協助控制拍面，身體轉側引拍移動到位，擊球點在身體斜前方腰部高度位置，擊球時非慣用手可協助網前送出力量，持拍手將力量持續往前延伸送出，須完整揮拍與收拍動作。注意手臂放鬆並配合腰部轉動，讓球順利過網。',
+      '正反拍來回對打': '正反拍交替對打有助於提升控球能力與協調性。重點是保持穩定節奏，不急於得分，專注於步伐移動與拍面角度控制。',
+      '上手發球': '上手發球動作需拋球適中、引拍完整，擊球點在頭頂稍前方。注意身體重心轉移與手臂揮動的連貫性，確保球落入對角發球區。',
+      '前排截擊練習': '截擊是網前快速反應的技術。拍面應保持穩定，手腕放鬆、前臂推送，利用來球力量快速回擊，不需大幅度揮拍。',
+      '高壓殺球練習': '高壓殺球通常在對手回出高球時使用。重點是抬肘引拍，擊球點在頭頂最高點稍前方，向下揮拍並控制落點，以速度與角度壓制對手。',
+      '低手切發球練習': '低手切發球是軟式網球特有的發球方式。擊球時拍面略微切削，讓球帶有旋轉並降低彈跳。重點是放鬆手腕、控制拍面角度，球需落在對角發球區，並使球體於落地後產生側向旋轉移動，使接發球者不易直接進行攻擊。',
+      '觀看 VR 學習影片（低手切發球）': '透過 VR 教學可以多角度觀察低手切發球的標準動作。建議學生專注於球拍觸球瞬間的角度與身體重心轉移，並反覆觀看加深印象。',
+      '低手切發球考試': '此關卡是檢測學生對低手切發球的掌握程度。考試時需保持姿勢穩定，連續完成指定次數的正確發球，並確保球落在規定發球區域。'
+    };
+
+    // 關卡內容 + YouTube 影片
+    const CHALLENGES = [
+      {title:'移位步法練習', goal:'熟悉場上各方向的移動與擊球位置調整。', method:'依序向四個角落移動並模擬擊球，在 60 秒內完成一循環即可過關。', video:'https://www.youtube.com/embed/4oTg4yA6aBo'},
+      {title:'正拍底線擊球過網', goal:'能以正拍底線擊球方式，將球穩定打過網。', method:'與搭檔從底線開始，成功 5 次將球打過網即可過關。', video:'https://www.youtube.com/embed/pZ1m2hqu9Nw'},
+      {title:'反拍底線擊球過網', goal:'掌握反拍擊球技巧與球拍角度控制。', method:'與搭檔在底線練習反拍擊球，成功 10 次過網即可過關。', video:'https://www.youtube.com/embed/l4ft0Qj_MiU'},
+      {title:'正反拍來回對打', goal:'培養穩定的回擊與協調性。', method:'與搭檔進行來回對打，連續 10 次不落地即可過關。', video:'https://www.youtube.com/embed/nnPZxvNBgKY'},
+      {title:'上手發球', goal:'學會用上手方式發球，球需落入對角發球有效區。', method:'與搭檔輪流發球，成功 5 次即可過關。', video:'https://www.youtube.com/embed/ZMts-Ggo6tI'},
+      {title:'前排截擊練習', goal:'掌握在網前攔截來球的技巧。', method:'搭檔從底線擊球，站在網前練習截擊，成功 10 次即可過關。', video:'https://www.youtube.com/embed/ESVhv1_gU7M'},
+      {title:'高壓殺球練習', goal:'學習高點擊球並向下壓球的技巧。', method:'搭檔拋球至頭頂上方，跳起或抬高擊球， 成功 5 次即可過關。', video:'https://www.youtube.com/embed/ADZn1N0a06E'},
+      {title:'低手切發球練習', goal:'熟悉軟式網球的基本下手切發球方式。', method:'用下手切球方式發球，連續 5 次過網且落入對角發球有效區即可過關。', video:'https://www.youtube.com/embed/CqgwF3iewmQ'},
+      {title:'觀看 VR 學習影片（低手切發球）', goal:'透過 VR 技術觀察與學習正確的低手切發球動作。', method:'完整觀看 4 周 (2次/周) 指定 VR 教學影片，理解並模仿動作即可過關。', video:'https://www.youtube.com/embed/CqgwF3iewmQ'},
+      {title:'低手切發球考試', goal:'檢驗學生對低手切發球的掌握程度。', method:'完成教師指定的 12 分低手切發球 (右邊外角3分、右邊內角3分、左邊內角3分、左邊外角3分) 即可過關。', video:'https://www.youtube.com/embed/CqgwF3iewmQ'},
+    ];
+
+    // ====== 工具函式 ======
+    const qs = (sel) => document.querySelector(sel);
+    const qsa = (sel) => Array.from(document.querySelectorAll(sel));
+    const nowISO = () => new Date().toISOString();
+
+    function keyFor(student) { return `softtennis_${student}`; }
+    function getProgress(student) { return JSON.parse(localStorage.getItem(keyFor(student)) || '{}'); }
+    function setProgress(student, obj) { localStorage.setItem(keyFor(student), JSON.stringify(obj)); }
+
+    function beep() {
+      // 使用 WebAudio 簡易音效
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.type='triangle'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.0001, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+      o.start(); o.stop(ctx.currentTime + 0.36);
+    }
+
+    // ====== 登入 / 模式 ======
+    function login() {
+      const id = qs('#studentId').value.trim();
+      const name = qs('#studentName').value.trim();
+      if(!id || !name) return alert('請輸入學號與姓名');
+      currentStudent = `${id}_${name}`;
+      // 初始化時間戳
+      const p = getProgress(currentStudent);
+      if(!p._meta) p._meta = { createdAt: nowISO(), lastUpdatedAt: nowISO(), wrongPassword: {}, firstFinishAt: null };
+      setProgress(currentStudent, p);
+
+      qs('#helloText').textContent = `Hi，${name}`;
+      qs('#loginSection').classList.add('hidden');
+      qs('#app').classList.remove('hidden');
+      renderCards(); loadStamps(); updateOverall();
+      // 教師模式顯示徽章於主畫面
+      qs('#modePill2').classList.toggle('hidden', !teacherMode);
+    }
+
+    function logout() {
+      currentStudent = null;
+      qs('#app').classList.add('hidden');
+      qs('#loginSection').classList.remove('hidden');
+      qs('#studentId').value=''; qs('#studentName').value='';
+    }
+
+    function toggleTeacherMode() {
+      teacherMode = !teacherMode;
+      qs('#modePill').classList.toggle('hidden', !teacherMode);
+      if(currentStudent) qs('#modePill2').classList.toggle('hidden', !teacherMode);
+    }
+
+    // ====== 關卡渲染 ======
+    function cardTemplate(idx, c) {
+      return `
+      <article class="card p-5 stamp-wrap relative">
+        <svg id="stamp${idx}" class="stamp-svg" viewBox="0 0 120 120" aria-hidden="true">
+          <defs>
+            <filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" result="noise"/>
+              <feDisplacementMap in="SourceGraphic" in2="noise" scale="1"/>
+            </filter>
+          </defs>
+          <circle cx="60" cy="60" r="46" fill="none" stroke="#ef4444" stroke-width="6"></circle>
+          <text x="60" y="66" text-anchor="middle" font-size="26" font-weight="800" fill="#ef4444" style="letter-spacing:2px; filter:url(#rough)">完成</text>
+        </svg>
+        <h3 class="text-xl font-bold text-[var(--headline)] mb-2">關卡${idx}：${c.title}</h3>
+        <p class="text-sm text-gray-700"><b>目標：</b>${c.goal}</p>
+        <p class="text-sm text-gray-700 mt-1"><b>執行方式：</b>${c.method}</p>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button class="btn btn-ghost" onclick="openGlossary('${c.title}')">✨ 說明術語</button>
+          <button class="btn btn-purple" onclick="openVideo(${idx}, '${c.title}', '${c.video}')">📘 學習資源</button>
+          <button class="btn btn-green" onclick="verify(${idx}, '${c.title}')">✅ 闖關成功</button>
+        </div>
+      </article>`;
+    }
+
+    function renderCards() {
+      const wrap = qs('#cards');
+      wrap.innerHTML = CHALLENGES.map((c, i) => cardTemplate(i+1, c)).join('');
+    }
+
+    // ====== 印章與驗證 ======
+    function loadStamps() {
+      const p = getProgress(currentStudent);
+      for(let i=1; i<=TOTAL; i++) {
+        const done = p['challenge'+i] === true;
+        if(done) qs('#stamp'+i)?.classList.add('stamp-bounce');
+      }
+    }
+
+    function markDone(i) {
+      const el = qs('#stamp'+i);
+      if(!el) return;
+      el.classList.remove('stamp-bounce'); // 重新播放動畫
+      // 觸發 reflow
+      void el.offsetWidth;
+      el.classList.add('stamp-bounce');
+    }
+
+    function verify(i, title) {
+      const input = prompt(`請輸入密碼以確認「關卡${i}：${title}」過關：`);
+      const p = getProgress(currentStudent);
+      if(!p._meta) p._meta = { createdAt: nowISO(), lastUpdatedAt: nowISO(), wrongPassword:{}, firstFinishAt:null };
+
+      if(input === null) return; // 取消
+      if(input === PASSWORD) {
+        // 成功
+        p['challenge'+i] = true;
+        p._meta.lastUpdatedAt = nowISO();
+        // 記錄若全部完成則時間戳
+        const count = countCompleted(p);
+        if(count === TOTAL && !p._meta.firstFinishAt) p._meta.firstFinishAt = nowISO();
+        setProgress(currentStudent, p);
+        markDone(i); beep(); updateOverall();
+        alert(`🎉 恭喜！關卡${i} 已通過！`);
+      } else {
+        // 錯誤次數
+        const wp = p._meta.wrongPassword || {}; wp[i] = (wp[i]||0) + 1; p._meta.wrongPassword = wp;
+        p._meta.lastUpdatedAt = nowISO();
+        setProgress(currentStudent, p);
+        if(wp[i] >= 3) {
+          alert('❗ 已錯誤輸入 3 次，請確認是否完成任務再嘗試。');
+        } else {
+          alert('❌ 密碼錯誤，請再試一次。');
+        }
+      }
+    }
+
+    // ====== 進度總覽 / 獎勵 ======
+    let overallChart;
+
+    function countCompleted(p) {
+      return Object.keys(p).filter(k => k.startsWith('challenge') && p[k] === true).length;
+    }
+
+    function updateOverall() {
+      const p = getProgress(currentStudent);
+      const done = countCompleted(p);
+      const percent = Math.round(done / TOTAL * 100);
+      qs('#overallText').textContent = `已完成 ${done}/${TOTAL} (${percent}%)`;
+      // 徽章
+      qs('#badge5').classList.toggle('hidden', done < 5);
+      qs('#badge8').classList.toggle('hidden', done < 8);
+      qs('#badge10').classList.toggle('hidden', done < 10);
+
+      // 圓形圖
+      const ctx = qs('#overallChart').getContext('2d');
+      if(!overallChart) {
+        overallChart = new Chart(ctx, {
+          type: 'doughnut',
+          data: { datasets: [{ data: [done, TOTAL-done], borderWidth: 4 }]},
+          options: {
+            cutout: '75%',
+            plugins: {
+              legend: { display:false },
+              tooltip: { enabled:false }
+            }
+          }
+        });
+      } else {
+        overallChart.data.datasets[0].data = [done, TOTAL-done];
+        overallChart.update();
+      }
+
+      // 100% 顯示獎盃動畫
+      if(done === TOTAL) showTrophy();
+      else hideTrophy();
+    }
+
+    function showTrophy() { qs('#trophy').classList.add('show'); beep(); }
+    function hideTrophy() { qs('#trophy').classList.remove('show'); }
+
+    // ====== 說明術語 Modal ======
+    function openGlossary(title) {
+      qs('#glossaryTitle').textContent = `說明術語：${title}`;
+      qs('#glossaryBody').textContent = LOCAL_GLOSSARY[title] || '（尚無說明）';
+      qs('#glossaryModal').classList.add('show');
+    }
+    function closeGlossary(){ qs('#glossaryModal').classList.remove('show'); }
+
+    // ====== 影片 Modal ======
+    function openVideo(i, title, url) {
+      qs('#videoTitle').textContent = `學習資源：關卡${i}「${title}」`;
+      const src = url.includes('embed') ? url : url.replace('watch?v=', 'embed/');
+      qs('#videoFrame').src = src + '?autoplay=1&rel=0';
+      qs('#videoModal').classList.add('show');
+    }
+    function closeVideo(){ qs('#videoFrame').src=''; qs('#videoModal').classList.remove('show'); }
+
+    // ====== 排行榜 (本機) ======
+    function openLeaderboard() {
+      const body = qs('#leaderboardBody'); body.innerHTML = '';
+      for(let i=0; i<localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if(!key.startsWith('softtennis_')) continue;
+        const who = key.replace('softtennis_', '');
+        const [sid, name] = who.split('_');
+        const p = JSON.parse(localStorage.getItem(key) || '{}');
+        const done = countCompleted(p);
+        const percent = Math.round(done / TOTAL * 100);
+        const meta = p._meta || {};
+        const last = meta.lastUpdatedAt ? new Date(meta.lastUpdatedAt).toLocaleString() : '-';
+        let totalTime = '-';
+        if(meta.firstFinishAt && meta.createdAt) {
+          const t = (new Date(meta.firstFinishAt) - new Date(meta.createdAt))/1000;
+          totalTime = `${Math.floor(t/60)}分${Math.floor(t%60)}秒`;
+        }
+        body.insertAdjacentHTML('beforeend',
+          `<tr><td>${sid}</td><td>${name}</td><td>${done}/${TOTAL}</td><td>${percent}%</td><td>${last}</td><td>${totalTime}</td></tr>`
+        );
+      }
+      qs('#leaderboardModal').classList.add('show');
+    }
+    function closeLeaderboard(){ qs('#leaderboardModal').classList.remove('show'); }
+
+    // ====== 啟動 ======
+    document.addEventListener('DOMContentLoaded', () => {
+      // nothing yet
+    });
+  </script>
+</body>
+</html>
